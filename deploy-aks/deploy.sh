@@ -8,52 +8,91 @@ set -o nounset
 #####################
 # CONFIGURE PARAMS
 
-RG_NAME=mlflowserver-aks-rg-04
-RG_LOCATION=australiaeast
+CLUSTER_EXISTS=1
+WINDOWS_ENV=1
+
+RG_NAME=kubernetes
+RG_LOCATION=centralus
 
 AKS_IMAGE=devlace/mlflowserver-azure:latest
-AKS_NAME=mlflowaks
+AKS_NAME=maxk8s
 AKS_STORAGE_ACCOUNT_NAME=storage$RANDOM
 AKS_STORAGE_CONTAINER_NAME=mlflow
 
 #################
 # DEPLOY
+if (($CLUSTER_EXISTS == 0))
+then
+    echo "Creating resource group: $RG_NAME"
+    az group create --name "$RG_NAME" --location "$RG_LOCATION"
 
-echo "Creating resource group: $RG_NAME"
-az group create --name "$RG_NAME" --location "$RG_LOCATION"
+    echo "Creating AKS cluster: $AKS_NAME"
+    az aks create \
+        --resource-group $RG_NAME \
+        --name $AKS_NAME \
+        --node-count 1 \
+        --enable-addons monitoring \
+        --generate-ssh-keys
+else
+    echo "Cluster $AKS_NAME exists."
+fi
 
-echo "Creating AKS cluster: $AKS_NAME"
-az aks create \
-    --resource-group $RG_NAME \
-    --name $AKS_NAME \
-    --node-count 1 \
-    --enable-addons monitoring \
-    --generate-ssh-keys
 
-echo "Retrieving credentials of AKS cluster: $AKS_NAME"
-az aks get-credentials \
-    --resource-group $RG_NAME \
-    --name $AKS_NAME
+# If you are running this bash script from a Windows environment, you may need az.cmd when using Azure CLI in Git Bash Terminal
+if (($WINDOWS_ENV == 0))
+then
+    echo "Retrieving credentials of AKS cluster: $AKS_NAME"
+    az aks get-credentials \
+        --resource-group $RG_NAME \
+        --name $AKS_NAME
 
-echo "Creating storage account: $AKS_STORAGE_ACCOUNT_NAME"
-az storage account create \
-    --resource-group $RG_NAME \
-    --location $RG_LOCATION \
-    --name $AKS_STORAGE_ACCOUNT_NAME \
-    --sku Standard_LRS
+    echo "Creating storage account: $AKS_STORAGE_ACCOUNT_NAME"
+    az storage account create \
+        --resource-group $RG_NAME \
+        --location $RG_LOCATION \
+        --name $AKS_STORAGE_ACCOUNT_NAME \
+        --sku Standard_LRS
 
-# Export the connection string as an environment variable. The following 'az storage share create' command
-# references this environment variable when creating the Azure file share.
-echo "Exporting storage connection string: $AKS_STORAGE_CONTAINER_NAME"
-export AZURE_STORAGE_CONNECTION_STRING=`az storage account show-connection-string --resource-group $RG_NAME --name $AKS_STORAGE_ACCOUNT_NAME --output tsv`
+    # Export the connection string as an environment variable. The following 'az storage share create' command
+    # references this environment variable when creating the Azure file share.
+    echo "Exporting storage connection string: $AKS_STORAGE_CONTAINER_NAME"
+    export AZURE_STORAGE_CONNECTION_STRING=`az storage account show-connection-string --resource-group $RG_NAME --name $AKS_STORAGE_ACCOUNT_NAME --output tsv`
 
-echo "Creating blob container for MLFlow artefacts: $AKS_STORAGE_CONTAINER_NAME"
-az storage container create -n $AKS_STORAGE_CONTAINER_NAME
+    echo "Creating blob container for MLFlow artefacts: $AKS_STORAGE_CONTAINER_NAME"
+    az storage container create -n $AKS_STORAGE_CONTAINER_NAME
 
-# Mlflow requires environment variable (AZURE_STORAGE_ACCESS_KEY) to be set at client and with Server
-# Export the access keyas an environment variable
-echo "Exporting storage keys: $AKS_STORAGE_ACCOUNT_NAME"
-export AZURE_STORAGE_ACCESS_KEY=$(az storage account keys list --resource-group $RG_NAME --account-name $AKS_STORAGE_ACCOUNT_NAME --query "[0].value" --output tsv)
+    # Mlflow requires environment variable (AZURE_STORAGE_ACCESS_KEY) to be set at client and with Server
+    # Export the access keyas an environment variable
+    echo "Exporting storage keys: $AKS_STORAGE_ACCOUNT_NAME"
+    export AZURE_STORAGE_ACCESS_KEY=$(az storage account keys list --resource-group $RG_NAME --account-name $AKS_STORAGE_ACCOUNT_NAME --query "[0].value" --output tsv)
+
+else
+    echo "Retrieving credentials of AKS cluster: $AKS_NAME"
+    az.cmd aks get-credentials \
+        --resource-group $RG_NAME \
+        --name $AKS_NAME
+
+    echo "Creating storage account: $AKS_STORAGE_ACCOUNT_NAME"
+    az.cmd storage account create \
+        --resource-group $RG_NAME \
+        --location $RG_LOCATION \
+        --name $AKS_STORAGE_ACCOUNT_NAME \
+        --sku Standard_LRS
+    
+    # Export the connection string as an environment variable. The following 'az storage share create' command
+    # references this environment variable when creating the Azure file share.
+    echo "Exporting storage connection string: $AKS_STORAGE_CONTAINER_NAME"
+    export AZURE_STORAGE_CONNECTION_STRING=`az.cmd storage account show-connection-string --resource-group $RG_NAME --name $AKS_STORAGE_ACCOUNT_NAME --output tsv`
+
+    echo "Creating blob container for MLFlow artefacts: $AKS_STORAGE_CONTAINER_NAME"
+    az.cmd storage container create -n $AKS_STORAGE_CONTAINER_NAME
+
+    # Mlflow requires environment variable (AZURE_STORAGE_ACCESS_KEY) to be set at client and with Server
+    # Export the access keyas an environment variable
+    echo "Exporting storage keys: $AKS_STORAGE_ACCOUNT_NAME"
+    export AZURE_STORAGE_ACCESS_KEY=$(az.cmd storage account keys list --resource-group $RG_NAME --account-name $AKS_STORAGE_ACCOUNT_NAME --query "[0].value" --output tsv)
+fi
+
 
 # Build blob storage fqdn of ml artifacts
 AKS_STORAGE_FQDN_ARTIFACT="wasbs://$AKS_STORAGE_CONTAINER_NAME@$AKS_STORAGE_ACCOUNT_NAME.blob.core.windows.net/mlartefacts"
