@@ -10,6 +10,12 @@
 
 1. Ensure you are in the `deploy-aks` folder.
 2. Open `deploy.sh` and `mlflowtracking.yaml` inspect/change top parameters and environment variables, if necessary.
+   - **CLUSTER_EXISTS**
+      - If you have a AKS cluster already deployed then CLUSTER_EXISTS should equal 1, if you do not have a cluster then it should be 0. 
+      - Make sure to put in your resource group name (RG_NAME), resource group location (RG_LOCATION), aks cluster name (AKS_NAME)
+   - **WINDOWS_ENV**
+      - Sometimes when running `deploy.sh` Azure CLI commands need to be formatted as `az.cmd` instead of `az`
+      - Set WINDOWS_ENV = 1 to enable this behavior
 3. Run `./deploy.sh`.
 4. Validate deployment by navigating to the deployed Kubernetes Service IP:port (default: 5000).
    - You can retrieve IP and port by running: 
